@@ -154,5 +154,6 @@ SlashCmdList["GBID"] = function (message, editbox)
     print("  minIncrement {number}: Sets the minimum bid increment for the current and future gbids.")
     print("Admin item command list")
     print("  add {item}: Adds an item to the current gbid and announces it.")
+    print("  remove {item}: Removes an item from the current gbid and announces it.")
   end
 end
