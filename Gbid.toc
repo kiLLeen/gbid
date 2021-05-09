@@ -5,5 +5,5 @@
 ## URL: 
 ## Notes: Gbid loot capture, database, and chatbot
 ## Version: 1.0
-## SavedVariables: items,prefix,minBid,minIncrement
+## SavedVariables: items,prefix,immediate,minQuality,minBid,minIncrement
 Gbid.lua

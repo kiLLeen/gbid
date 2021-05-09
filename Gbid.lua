@@ -1,4 +1,7 @@
 local Gbid = CreateFrame("Frame", "Gbid")
+Gbid:RegisterEvent("CHAT_MSG_RAID")
+Gbid:RegisterEvent("CHAT_MSG_RAID_LEADER")
+
 Gbid:RegisterEvent("ADDON_LOADED")
 Gbid:RegisterEvent("GROUP_JOINED")
 local recording = false
@@ -11,10 +14,59 @@ end
 
 function Gbid:add(item)
   local itemName, itemLink, itemQuality = GetItemInfo(item)
-  local displayPrefix = ((prefix == "") and "") or (prefix .. " ")
-  SendChatMessage("Bidding has started on " .. itemLink .. ". Type \"" .. displayPrefix .. itemName .. " " .. tostring(minBid) .. "\" to make a minimum bid.", "RAID")
+  if (immediate and itemQuality >= minQuality) then
+    SendChatMessage("Bidding has started on " .. itemLink .. ". Type \"" .. prefix .. " " .. itemName .. " " .. tostring(minBid) .. "\" to make a minimum bid.", "RAID")
+  end
   -- TODO: Add a player and bid table to allow bids when multiple of the same item drops.
-  items[itemLink] = {}
+  items[itemLink] = { biddable = immediate }
+end
+
+function Gbid:handleStart(item)
+  if (not item or item == "") then
+    for item, _ in pairs(items) do Gbid:start(item) end
+  elseif (items[item]) then
+    Gbid:start(item)
+  else
+    print("Item does not exist in the bid list.")
+  end
+end
+
+function Gbid:start(item)
+  local itemName, itemLink, itemQuality = GetItemInfo(item)
+  if (items[itemLink]) then
+    if (not items[itemLink].biddable) then
+      items[itemLink].biddable = true
+      SendChatMessage("Bidding has started on " .. itemLink .. ". Type \"" .. prefix .. " " .. itemName .. " " .. tostring(minBid) .. "\" to make a minimum bid.", "RAID")
+    else
+      print("The bid for " .. item .. " is already in progress. You can stop it with \"/gbid stop " .. item .. "\".")
+    end
+  else
+    print("Could not start the bid for " .. item .. " because it was not found. You can try to \"/gbid add " .. item .. "\".")
+  end
+end
+
+function Gbid:handleStop(item)
+  if (not item or item == "") then
+    for item, _ in pairs(items) do Gbid:stop(item) end
+  elseif (items[item]) then
+    Gbid:stop(item)
+  else
+    print("Item does not exist in the bid list.")
+  end
+end
+
+function Gbid:stop(item)
+  local itemName, itemLink, itemQuality = GetItemInfo(item)
+  if (items[itemLink]) then
+    if (items[itemLink].biddable) then
+      items[itemLink].biddable = false
+      SendChatMessage("Bidding has stopped on " .. itemLink .. ".", "RAID")
+    else
+      print("The bid for " .. item .. " is already stopped. You can start it with \"/gbid start " .. item .. "\".")
+    end
+  else
+    print("Could not stop the bid for " .. item .. " because it was not found. You can try to \"/gbid add " .. item .. "\".")
+  end
 end
 
 function Gbid:remove(item)
@@ -25,15 +77,11 @@ end
 
 function Gbid:record()
   Gbid:RegisterEvent("CHAT_MSG_LOOT")
-  Gbid:RegisterEvent("CHAT_MSG_RAID")
-  Gbid:RegisterEvent("CHAT_MSG_RAID_LEADER")
   recording = true
 end
 
 function Gbid:norecord()
   Gbid:UnregisterEvent("CHAT_MSG_LOOT")
-  Gbid:UnregisterEvent("CHAT_MSG_RAID")
-  Gbid:UnregisterEvent("CHAT_MSG_RAID_LEADER")
   recording = false
 end
 
@@ -60,7 +108,7 @@ function Gbid:bidding(message, player, lang)
   local bidChatRef = tonumber(string.match(message, "^" .. prefix .. ".*%s+(%d+)g?$"))
   if(itemChatRef and bidChatRef) then
     local itemName, itemLink, itemQuality = GetItemInfo(itemChatRef)
-    if (itemName and items[itemLink]) then
+    if (itemName and items[itemLink] and items[itemLink].biddable) then
       if (not items[itemLink].bid and bidChatRef < minBid) then
         SendChatMessage(tostring(bidChatRef) .. "g is below the minimum bid of " .. tostring(minBid) .. ". There are currently no bidders on " .. itemLink .. ".", "RAID")
       elseif (items[itemLink].bid and bidChatRef <= items[itemLink].bid) then    
@@ -76,10 +124,29 @@ function Gbid:bidding(message, player, lang)
   end
 end
 
+function Gbid:handleReport()
+  local i = 1
+  local total = 0
+  SendChatMessage("----------------------------", "RAID")
+  for item, bidInfo in pairs(items) do
+    local bid = "No bids"
+    if (bidInfo.bid) then
+      bid = bidInfo.player .. " @ " .. bidInfo.bid .. "g"
+      total = total + bidInfo.bid
+    end
+    SendChatMessage(tostring(i) .. ". " .. item .. ": " .. bid, "RAID")
+    i = i + 1
+  end
+  SendChatMessage("----------------------------", "RAID")
+  SendChatMessage("Average gold per item: " .. string.format("%.2f", total / (i-1)) .. "g", "RAID")
+  SendChatMessage("Total gold: " .. total .. "g", "RAID")
+end
+
 function Gbid:ADDON_LOADED(event, title)
   if (title == "Gbid") then
     items = items or {}
     prefix = prefix or "!bid"
+    immediate = (immediate ~= nil and immediate) or true
     minQuality = minQuality or 4
     minBid = minBid or 100
     minIncrement = minIncrement or 20
@@ -94,33 +161,25 @@ end)
 SLASH_GBID1 = "/gbid"
 SlashCmdList["GBID"] = function (message, editbox)
   if (string.find(message, "^status")) then
-    if (recording) then
-      print("You ARE currently recording loot data...")
-    else
-      print("You ARE NOT currently recording loot data.")
-    end
+    print("Item quality threshold is at " .. tostring(minQuality) .. ".")
+    print("You ARE" .. ((recording and "") or " NOT") .. " currently recording loot data...")
   elseif (string.find(message, "^record")) then
     print("Recording loot data...")
     Gbid:record()
   elseif (string.find(message, "^norecord")) then
     print("No longer recording loot data.")
     Gbid:norecord()
+  elseif (string.find(message, "^start")) then
+    local item = string.match(message, "^start%s+(.*)$")
+    Gbid:handleStart(item)
+  elseif (string.find(message, "^stop")) then
+    local item = string.match(message, "^stop%s+(.*)$")
+    Gbid:handleStop(item)
   elseif (string.find(message, "^clear")) then
     print("Cleared all loot and bids.")
     Gbid:clear()
   elseif (string.find(message, "^report")) then
-    local i = 1
-    local total = 0
-    for item, bidInfo in pairs(items) do
-      local bid = "No bids"
-      if (bidInfo.bid) then
-        bid = bidInfo.player .. " @ " .. bidInfo.bid .. "g"
-        total = total + bidInfo.bid
-      end
-      SendChatMessage(tostring(i) .. ". " .. item .. ": " .. bid, "RAID")
-      i = i + 1
-    end
-    SendChatMessage("Total gold: " .. total .. "g", "RAID")
+    Gbid:handleReport()
   elseif (string.find(message, "^add")) then
     local item = string.match(message, "^add%s+(.*)$")
     Gbid:add(item)
@@ -130,6 +189,14 @@ SlashCmdList["GBID"] = function (message, editbox)
   elseif (string.find(message, "^prefix")) then
     prefix = string.match(message, "^prefix%s+(%S+)$") or "!bid"
     print("Bidding prefix set to \"" .. prefix .. "\"")
+  elseif (string.find(message, "^quality")) then
+    local number = tonumber(string.match(message, "^quality%s+(%d)$"))
+    if (not number or number < 0 or number > 4) then
+      print("Minimum item quality can be in the range 0-4. 0 being grey items and 4 being epic items.")
+    else
+      minQuality = number
+      print("Minimum item quality set to " .. number .. ".")
+    end
   elseif (string.find(message, "^minBid")) then
     local num = string.match(message, "^minBid%s+(%d+)$")
     if (num) then
@@ -144,25 +211,34 @@ SlashCmdList["GBID"] = function (message, editbox)
     else
       print ("Incorrect format. Here is an example: /gbid minIncrement 10")
     end
+  elseif (string.find(message, "^immediate")) then
+    immediate = true
+    print("Bidding will start when loot drops.")
+  elseif (string.find(message, "^noimmediate")) then
+    immediate = false
+    print("Bidding will now be manually configured.")
   else
     print("Gbid chatbot - Created by Kleenex on Herod")
     print(" ")
-    print("Commands")
-    print("  status: Reports loot recording and bidding status.")
+    print("General commands")
+    print("  status: Reports status of loot recording.")
     print("  record: Records loot.") 
     print("  norecord: Stops recording loot.") 
-    print("  clear: Clears data stored on any previously ran gbids.") 
+    print("  start {item}: This starts the bidding on an item. If no item is given, bidding starts for all items.")
+    print("  stop {item}: This stops the bidding on an item. If no item is given, bidding stops for all items.")
+    print("  clear: Clears data stored on any previously ran gbids. (Be careful!)") 
     print("  report: One time report of the current state of the items and bids.") 
     print(" ")
     print("Item commands")
-    print("  add {item}: Adds an item to the current gbid and announces it.")
-    print("  remove {item}: Removes an item from the current gbid and announces it.")
+    print("  add {item}: Adds an item to the current gbid.")
+    print("  remove {item}: Removes an item from the current gbid and announces its removal.")
     print(" ")
     print("Settings")
-    print("  prefix {string}: Bidding prefix. Cannot be blank.")
-    -- TODO: Doesn't work yet
-    print("  quality {number}: Sets the minimum item quality for gbids (default is 4 which is Epic item quality.) - TODO")
-    print("  minBid {number}: Sets the minimum bid for the current and future gbids.")
-    print("  minIncrement {number}: Sets the minimum bid increment for the current and future gbids.")
+    print("  prefix {string}: (Currently: \"" .. prefix .. "\") Bidding prefix. Cannot be blank.")
+    print("  quality {number}: (Currently: " .. tostring(minQuality) .. ") Sets the minimum item quality for gbids (default is 4 which is Epic item quality.)")
+    print("  minBid {number}: (Currently: " .. tostring(minBid) .. ") Sets the minimum bid for the current and future gbids.")
+    print("  minIncrement {number}: (Currently: " .. tostring(minIncrement) .. ") Sets the minimum bid increment for the current and future gbids.")
+    print("  immediate: (Currently: " .. (immediate and "" or "no") .. "immediate) Immediate mode. Allow bidding as soon as loot drops.")
+    print("  noimmediate: (Currently: " .. (immediate and "" or "no") .. "immediate) Manually configure when loot is biddable.")
   end
 end
