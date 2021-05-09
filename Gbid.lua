@@ -11,7 +11,8 @@ end
 
 function Gbid:add(item)
   local itemName, itemLink, itemQuality = GetItemInfo(item)
-  SendChatMessage("Bidding has started on " .. itemLink .. ". Type \"!bid " .. itemName .. " " .. tostring(minBid) .. "\" to make a minimum bid.", "RAID")
+  local displayPrefix = ((prefix == "") and "") or (prefix .. " ")
+  SendChatMessage("Bidding has started on " .. itemLink .. ". Type \"" .. displayPrefix .. itemName .. " " .. tostring(minBid) .. "\" to make a minimum bid.", "RAID")
   -- TODO: Add a player and bid table to allow bids when multiple of the same item drops.
   items[itemLink] = {}
 end
@@ -55,9 +56,9 @@ function Gbid:CHAT_MSG_RAID_LEADER(event, message, player, lang)
 end
 
 function Gbid:bidding(message, player, lang)
-  if(string.find(message, "^!bid ")) then
-    local itemChatRef = string.match(message, "^!bid%s+(.*)%s+%d+g?$")
-    local bidChatRef = tonumber(string.match(message, "^!bid%s+.*%s+(%d+)g?$"))
+  local itemChatRef = string.match(message, "^" .. prefix .. "%s+(.*)%s+%d+g?$")
+  local bidChatRef = tonumber(string.match(message, "^" .. prefix .. ".*%s+(%d+)g?$"))
+  if(itemChatRef and bidChatRef) then
     local itemName, itemLink, itemQuality = GetItemInfo(itemChatRef)
     if (itemName and items[itemLink]) then
       if (not items[itemLink].bid and bidChatRef < minBid) then
@@ -78,6 +79,7 @@ end
 function Gbid:ADDON_LOADED(event, title)
   if (title == "Gbid") then
     items = items or {}
+    prefix = prefix or "!bid"
     minQuality = minQuality or 4
     minBid = minBid or 100
     minIncrement = minIncrement or 20
@@ -125,6 +127,9 @@ SlashCmdList["GBID"] = function (message, editbox)
   elseif (string.find(message, "^remove")) then
     local item = string.match(message, "^remove%s+(.*)$")
     Gbid:remove(item)
+  elseif (string.find(message, "^prefix")) then
+    prefix = string.match(message, "^prefix%s+(%S+)$") or "!bid"
+    print("Bidding prefix set to \"" .. prefix .. "\"")
   elseif (string.find(message, "^minBid")) then
     local num = string.match(message, "^minBid%s+(%d+)$")
     if (num) then
@@ -141,19 +146,23 @@ SlashCmdList["GBID"] = function (message, editbox)
     end
   else
     print("Gbid chatbot - Created by Kleenex on Herod")
-    print("General command list")
+    print(" ")
+    print("Commands")
     print("  status: Reports loot recording and bidding status.")
     print("  record: Records loot.") 
     print("  norecord: Stops recording loot.") 
     print("  clear: Clears data stored on any previously ran gbids.") 
     print("  report: One time report of the current state of the items and bids.") 
-    -- TODO: Doesn't work yet
+    print(" ")
+    print("Item commands")
+    print("  add {item}: Adds an item to the current gbid and announces it.")
+    print("  remove {item}: Removes an item from the current gbid and announces it.")
+    print(" ")
     print("Settings")
+    print("  prefix {string}: Bidding prefix. Cannot be blank.")
+    -- TODO: Doesn't work yet
     print("  quality {number}: Sets the minimum item quality for gbids (default is 4 which is Epic item quality.) - TODO")
     print("  minBid {number}: Sets the minimum bid for the current and future gbids.")
     print("  minIncrement {number}: Sets the minimum bid increment for the current and future gbids.")
-    print("Admin item command list")
-    print("  add {item}: Adds an item to the current gbid and announces it.")
-    print("  remove {item}: Removes an item from the current gbid and announces it.")
   end
 end
