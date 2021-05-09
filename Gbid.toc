@@ -1,0 +1,9 @@
+## Interface: 11307
+## Title: Gbid chatbot
+## Author: Kleenex
+## eMail: nkilleen@gmail.com
+## URL: 
+## Notes: Gbid loot capture, database, and chatbot
+## Version: 1.0
+## SavedVariables: items,minBid,minIncrement
+Gbid.lua
