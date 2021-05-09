@@ -124,22 +124,30 @@ function Gbid:bidding(message, player, lang)
   end
 end
 
-function Gbid:handleReport()
+function Gbid:display(message, broadcast)
+  if (broadcast) then
+    SendChatMessage(message, "RAID")
+  else
+    print(message)
+  end
+end
+
+function Gbid:handleReport(broadcast)
   local i = 1
   local total = 0
-  SendChatMessage("----------------------------", "RAID")
+  Gbid:display("----------------------------", broadcast)
   for item, bidInfo in pairs(items) do
     local bid = "No bids"
     if (bidInfo.bid) then
       bid = bidInfo.player .. " @ " .. bidInfo.bid .. "g"
       total = total + bidInfo.bid
     end
-    SendChatMessage(tostring(i) .. ". " .. item .. ": " .. bid, "RAID")
+    Gbid:display(tostring(i) .. ". " .. item .. ": " .. bid, broadcast)
     i = i + 1
   end
-  SendChatMessage("----------------------------", "RAID")
-  SendChatMessage("Average gold per item: " .. string.format("%.2f", total / (i-1)) .. "g", "RAID")
-  SendChatMessage("Total gold: " .. total .. "g", "RAID")
+  Gbid:display("----------------------------", broadcast)
+  Gbid:display("Average gold per item: " .. string.format("%.2f", total / (i-1)) .. "g", broadcast)
+  Gbid:display("Total gold: " .. total .. "g", broadcast)
 end
 
 function Gbid:ADDON_LOADED(event, title)
@@ -179,7 +187,8 @@ SlashCmdList["GBID"] = function (message, editbox)
     print("Cleared all loot and bids.")
     Gbid:clear()
   elseif (string.find(message, "^report")) then
-    Gbid:handleReport()
+    local broadcast = string.match(message, "^report%s+(.*)$")
+    Gbid:handleReport(not not broadcast)
   elseif (string.find(message, "^add")) then
     local item = string.match(message, "^add%s+(.*)$")
     Gbid:add(item)
@@ -227,7 +236,7 @@ SlashCmdList["GBID"] = function (message, editbox)
     print("  start {item}: This starts the bidding on an item. If no item is given, bidding starts for all items.")
     print("  stop {item}: This stops the bidding on an item. If no item is given, bidding stops for all items.")
     print("  clear: Clears data stored on any previously ran gbids. (Be careful!)") 
-    print("  report: One time report of the current state of the items and bids.") 
+    print("  report [raid]: Displays all items recorded. If there are any arguments (eg. \"/gbid report raid\") this will report the list in raid.") 
     print(" ")
     print("Item commands")
     print("  add {item}: Adds an item to the current gbid.")
